@@ -1,0 +1,255 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  phone         String         @unique
+  email         String?        @unique
+  passwordHash  String
+  role          String         @default("CUSTOMER") // CUSTOMER, PROVIDER, ADMIN
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  listings      Listing[]      @relation("ProviderListings")
+  verifiedItems Listing[]      @relation("AdminVerifications")
+  bookings      Booking[]
+  reviews       Review[]
+  notifications Notification[]
+  favorites     Favorite[]
+}
+
+model Category {
+  id          String              @id @default(uuid())
+  name        String              // شاليهات واستراحات، ملاعب، قاعات
+  slug        String              @unique
+  icon        String?
+  description String?
+  isActive    Boolean             @default(true)
+  listings    Listing[]
+  attributes  CategoryAttribute[]
+}
+
+model Governorate {
+  id     String @id @default(uuid())
+  name   String // البصرة، بغداد، أربيل...
+  cities City[]
+}
+
+model City {
+  id            String      @id @default(uuid())
+  name          String      // البصرة القديمة، الجبيلة، الطويسة...
+  governorateId String
+  governorate   Governorate @relation(fields: [governorateId], references: [id])
+  listings      Listing[]
+}
+
+model Listing {
+  id                      String                  @id @default(uuid())
+  title                   String
+  description             String
+  categoryId              String
+  category                Category                @relation(fields: [categoryId], references: [id])
+  providerId              String
+  provider                User                    @relation("ProviderListings", fields: [providerId], references: [id])
+  cityId                  String
+  city                    City                    @relation(fields: [cityId], references: [id])
+  district                String?
+  address                 String
+  latitude                Float?
+  longitude               Float?
+  basePrice               Int                     // IQD as Integer (no floats)
+  pricingType             String                  @default("PER_SHIFT") // PER_HOUR, PER_SHIFT, PER_DAY
+  capacity                Int?
+  contactPhone            String
+  whatsappNumber          String?
+  
+  // Verification Badges
+  isVerified              Boolean                 @default(false)
+  verifiedAt              DateTime?
+  verifiedById            String?
+  verifiedBy              User?                   @relation("AdminVerifications", fields: [verifiedById], references: [id])
+
+  // Availability Last Updated Timestamp
+  availabilityLastUpdatedAt DateTime              @default(now())
+  
+  isActive                Boolean                 @default(true)
+  rating                  Float                   @default(0)
+  reviewCount             Int                     @default(0)
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  images                  ListingImage[]
+  amenities               ListingAmenity[]
+  attributeValues         ListingAttributeValue[]
+  availabilityTemplates   AvailabilityTemplate[]
+  availabilityExceptions  AvailabilityException[]
+  pricingRules            PricingRule[]
+  bookings                Booking[]
+  reviews                 Review[]
+  favorites               Favorite[]
+}
+
+model ListingImage {
+  id        String   @id @default(uuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  isPrimary Boolean  @default(false)
+}
+
+model CategoryAttribute {
+  id         String                  @id @default(uuid())
+  categoryId String
+  category   Category                @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String
+  type       String                  // TEXT, NUMBER, BOOLEAN, SELECT
+  options    String?
+  values     ListingAttributeValue[]
+}
+
+model ListingAttributeValue {
+  id          String            @id @default(uuid())
+  listingId   String
+  listing     Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  attributeId String
+  attribute   CategoryAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  value       String
+}
+
+model Amenity {
+  id       String           @id @default(uuid())
+  name     String
+  icon     String?
+  listings ListingAmenity[]
+}
+
+model ListingAmenity {
+  listingId String
+  amenityId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([listingId, amenityId])
+}
+
+model AvailabilityTemplate {
+  id        String                     @id @default(uuid())
+  listingId String
+  listing   Listing                    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  dayOfWeek String                     // SATURDAY, SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY
+  slots     AvailabilityTemplateSlot[]
+}
+
+model AvailabilityTemplateSlot {
+  id         String               @id @default(uuid())
+  templateId String
+  template   AvailabilityTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  startTime  String               // e.g. "08:00"
+  endTime    String               // e.g. "16:00"
+  shiftName  String?
+  price      Int?                 // Price as Int IQD
+}
+
+model AvailabilityException {
+  id        String   @id @default(uuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  date      String   // format YYYY-MM-DD
+  startTime String?
+  endTime   String?
+  shiftName String?
+  price     Int?     // Price as Int IQD
+  status    String   @default("BLOCKED") // AVAILABLE, LIMITED, BOOKED, BLOCKED, PENDING_CONFIRMATION
+  reason    String?
+}
+
+model PricingRule {
+  id           String    @id @default(uuid())
+  listingId    String
+  listing      Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  name         String
+  dayOfWeek    String?
+  specificDate String?
+  price        Int       // Price as Int IQD
+  isActive     Boolean   @default(true)
+}
+
+model Booking {
+  id               String   @id @default(uuid())
+  bookingNumber    String   @unique
+  customerId       String
+  customer         User     @relation(fields: [customerId], references: [id])
+  listingId        String
+  listing          Listing  @relation(fields: [listingId], references: [id])
+  bookingDate      String   // format YYYY-MM-DD
+  startTime        String
+  endTime          String
+  shiftName        String?
+  totalPrice       Int      // Price as Int IQD
+  
+  commissionRate   Float    // e.g. 5.0 (%)
+  commissionAmount Int      // Commission as Int IQD
+  providerEarnings Int      // Earnings as Int IQD
+  
+  status           String   @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED, REJECTED, EXPIRED
+  paymentStatus    String   @default("UNPAID")  // UNPAID, PAID, REFUNDED
+  paymentMethod    String   @default("CASH")    // CASH, BANK_TRANSFER, ZAIN_CASH, MASTERCARD
+  notes            String?
+  
+  // Cancellation & Rejection Policy Tracking
+  cancelledBy        String?   // CUSTOMER, PROVIDER, ADMIN, SYSTEM
+  cancellationReason String?   // Reason category
+  cancellationNote   String?   // User/Provider note
+  cancelledAt        DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  reviews          Review[]
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  bookingId String?  @unique
+  booking   Booking? @relation(fields: [bookingId], references: [id])
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model Favorite {
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model SystemSetting {
+  id    String @id @default(uuid())
+  key   String @unique // e.g. "DEFAULT_COMMISSION_PERCENT", "BOOKING_PENDING_TIMEOUT_MINUTES"
+  value String
+}
